@@ -12,15 +12,25 @@ from keras import backend as K
 from keras.optimizers import Adam
 from keras.callbacks import Callback
 import flow_layers as fl
+import os
+import keras.backend.tensorflow_backend as KTF
+import tensorflow as tf
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+config = tf.ConfigProto()
+config.gpu_options.allow_growth=True
+sess = tf.Session(config=config)
+KTF.set_session(sess)
 
 
-imgs = glob.glob('CelebA-HQ/train/*.png')
+# imgs = glob.glob('CelebA-HQ/train/*.png')
+imgs = glob.glob('../Datasets/CelebA/Img/img_align_celeba/*.jpg')
 np.random.shuffle(imgs)
+imgs = imgs[:48000]
 
 height,width = misc.imread(imgs[0]).shape[:2]
 center_height = int((height - width) / 2)
-img_dim = 128
-
+img_dim = 64
 
 def imread(f):
     x = misc.imread(f)
@@ -28,8 +38,7 @@ def imread(f):
     x = misc.imresize(x, (img_dim, img_dim))
     return x.astype(np.float32) / 255 * 2 - 1
 
-
-def data_generator(batch_size=32):
+def data_generator(batch_size=48):
     X = []
     while True:
         np.random.shuffle(imgs)
@@ -40,12 +49,13 @@ def data_generator(batch_size=32):
                 yield X,None
                 X = []
 
-
 x_in = Input(shape=(img_dim, img_dim, 3))
 x = x_in
 
 for i in range(3):
+    # Squeeze
     x = fl.Squeeze()(x)
+    # Block
     for j in range(12):
         x_ = x
         x_ = Conv2D(K.int_shape(x_)[-1],
@@ -61,7 +71,7 @@ for i in range(3):
 
 
 encoder = Model(x_in, x)
-encoder.summary()
+#encoder.summary()
 
 
 z_in = Input(shape=K.int_shape(encoder.output)[1:])
@@ -85,8 +95,7 @@ for i in range(3):
 z = Activation('tanh')(z)
 
 decoder = Model(z_in, z)
-decoder.summary()
-
+#decoder.summary()
 
 u = Lambda(lambda z: K.random_normal(shape=K.shape(z)))(x) # 留着，不能动
 z = Reshape(K.int_shape(u)[1:]+(1,))(u)
@@ -233,7 +242,7 @@ for i,(split,condactnorm,reshape) in enumerate(zip(*outer_layers)[::-1]):
 
 
 flow_decoder = Model(x_in, x)
-flow_decoder.summary()
+#flow_decoder.summary()
 
 
 def sample(path, std=1):
@@ -257,13 +266,16 @@ class Evaluate(Callback):
         import os
         self.lowest = 1e10
         self.losses = []
-        if not os.path.exists('samples'):
-            os.mkdir('samples')
+        if not os.path.exists('f_vae_samples'):
+            os.mkdir('f_vae_samples')
     def on_epoch_end(self, epoch, logs=None):
-        path = 'samples/test_%s.png' % epoch
+        path = 'f_vae_samples/test_%s.png' % epoch
         sample(path, 1)
-        path = 'samples/test_0.8_%s.png' % epoch
+        path = 'f_vae_samples/test_0.8_%s.png' % epoch
         sample(path, 0.8)
+        path = 'f_vae_samples/interpolation_2_%s.png' % epoch
+        interpolation_sample_2(path)
+
         self.losses.append((epoch, logs['loss']))
         if logs['loss'] <= self.lowest:
             self.lowest = logs['loss']
@@ -276,7 +288,6 @@ vae.fit_generator(data_generator(),
                   epochs=1000,
                   steps_per_epoch=1000,
                   callbacks=[evaluator])
-
 
 
 

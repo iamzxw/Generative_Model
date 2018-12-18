@@ -8,6 +8,10 @@ from keras.models import Model
 from keras.datasets import cifar10
 from keras.callbacks import Callback
 from keras.optimizers import Adam
+from keras.utils import multi_gpu_model
+import keras.backend.tensorflow_backend as KTF
+import tensorflow as tf
+
 from flow_layers import *
 import imageio
 import numpy as np
@@ -16,6 +20,10 @@ import glob
 import os
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+config = tf.ConfigProto()
+config.gpu_options.allow_growth=True
+sess = tf.Session(config=config)
+KTF.set_session(sess)
 
 if not os.path.exists('samples'):
     os.mkdir('samples')
@@ -27,7 +35,7 @@ imgs = imgs[:32000]
 height,width = misc.imread(imgs[0]).shape[:2]
 center_height = int((height - width) / 2)
 
-img_size = 64  # for a fast try, please use img_size=32
+img_size = 32  # for a fast try, please use img_size=32
 depth = 10  # orginal paper use depth=32
 level = 3  # orginal paper use level=6 for 256*256 CelebA HQ
 
@@ -48,7 +56,6 @@ def data_generator(batch_size=32):
                 X = np.array(X)
                 yield X,X.reshape((X.shape[0], -1))
                 X = []
-
 
 def build_basic_model(in_channel):
     """基础模型，即耦合层中的模型（basic model for Coupling）
@@ -131,11 +138,13 @@ x = final_actnorm(x)
 x = final_reshape(x)
 x = final_concat(x_outs+[x])
 
+encoder = Model(x_in, x)
 for l in encoder.layers:
     if hasattr(l, 'logdet'):
         encoder.add_loss(l.logdet)
 
-encoder = Model(x_in, x)
+# encoder = multi_gpu_model(encoder, 2)
+
 encoder.summary()
 encoder.compile(loss=lambda y_true,y_pred: 0.5 * K.sum(y_pred**2, 1) + 0.5 * np.log(2*np.pi) * K.int_shape(y_pred)[1],
                 optimizer=Adam(1e-4))
