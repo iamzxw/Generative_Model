@@ -73,7 +73,6 @@ for i in range(3):
 encoder = Model(x_in, x)
 #encoder.summary()
 
-
 z_in = Input(shape=K.int_shape(encoder.output)[1:])
 z = z_in
 
@@ -244,53 +243,6 @@ for i,(split,condactnorm,reshape) in enumerate(zip(*outer_layers)[::-1]):
 flow_decoder = Model(x_in, x)
 #flow_decoder.summary()
 
-
-def sample(path, std=1):
-    n = 9
-    figure = np.zeros((img_dim*n, img_dim*n, 3))
-    for i in range(n):
-        for j in range(n):
-            noise_shape = (1,) + K.int_shape(flow_decoder.inputs[0])[1:]
-            z_sample = np.array(np.random.randn(*noise_shape)) * std
-            x_recon = decoder.predict(flow_decoder.predict(z_sample))
-            digit = x_recon[0]
-            figure[i*img_dim: (i+1)*img_dim,
-                   j*img_dim: (j+1)*img_dim] = digit
-    figure = (figure + 1) / 2 * 255
-    figure = np.clip(figure, 0, 255)
-    imageio.imwrite(path, figure)
-
-
-class Evaluate(Callback):
-    def __init__(self):
-        import os
-        self.lowest = 1e10
-        self.losses = []
-        if not os.path.exists('f_vae_samples'):
-            os.mkdir('f_vae_samples')
-    def on_epoch_end(self, epoch, logs=None):
-        path = 'f_vae_samples/test_%s.png' % epoch
-        sample(path, 1)
-        path = 'f_vae_samples/test_0.8_%s.png' % epoch
-        sample(path, 0.8)
-        path = 'f_vae_samples/interpolation_2_%s.png' % epoch
-        interpolation_sample_2(path)
-
-        self.losses.append((epoch, logs['loss']))
-        if logs['loss'] <= self.lowest:
-            self.lowest = logs['loss']
-            vae.save_weights('./best_flow_vae.weights')
-
-
-evaluator = Evaluate()
-
-vae.fit_generator(data_generator(),
-                  epochs=1000,
-                  steps_per_epoch=1000,
-                  callbacks=[evaluator])
-
-
-
 def encode_decode_sample(path):
     n = 9
     figure = np.zeros((img_dim*n, img_dim*n, 3))
@@ -340,3 +292,50 @@ def interpolation_sample_4(path):
     figure = (figure + 1) / 2 * 255
     figure = np.clip(figure, 0, 255)
     imageio.imwrite(path, figure)
+
+def sample(path, std=1):
+    n = 9
+    figure = np.zeros((img_dim*n, img_dim*n, 3))
+    for i in range(n):
+        for j in range(n):
+            noise_shape = (1,) + K.int_shape(flow_decoder.inputs[0])[1:]
+            z_sample = np.array(np.random.randn(*noise_shape)) * std
+            x_recon = decoder.predict(flow_decoder.predict(z_sample))
+            digit = x_recon[0]
+            figure[i*img_dim: (i+1)*img_dim,
+                   j*img_dim: (j+1)*img_dim] = digit
+    figure = (figure + 1) / 2 * 255
+    figure = np.clip(figure, 0, 255)
+    imageio.imwrite(path, figure)
+
+
+class Evaluate(Callback):
+    def __init__(self):
+        import os
+        self.lowest = 1e10
+        self.losses = []
+        if not os.path.exists('f_vae_samples'):
+            os.mkdir('f_vae_samples')
+    def on_epoch_end(self, epoch, logs=None):
+        path = 'f_vae_samples/test_%s.png' % epoch
+        sample(path, 1)
+        path = 'f_vae_samples/test_0.8_%s.png' % epoch
+        sample(path, 0.8)
+        path = 'f_vae_samples/interpolation_2_%s.png' % epoch
+        interpolation_sample_2(path)
+
+        self.losses.append((epoch, logs['loss']))
+        if logs['loss'] <= self.lowest:
+            self.lowest = logs['loss']
+            vae.save_weights('./best_flow_vae.weights')
+
+
+evaluator = Evaluate()
+
+vae.fit_generator(data_generator(),
+                  epochs=1000,
+                  steps_per_epoch=1000,
+                  callbacks=[evaluator])
+
+
+
